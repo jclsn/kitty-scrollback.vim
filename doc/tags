@@ -1,0 +1,10 @@
+:KittyScrollbackSetup	kitty-scrollback.txt	/*:KittyScrollbackSetup*
+g:kitty_scrollback_check	kitty-scrollback.txt	/*g:kitty_scrollback_check*
+kitty-scrollback	kitty-scrollback.txt	/*kitty-scrollback*
+kitty-scrollback-config	kitty-scrollback.txt	/*kitty-scrollback-config*
+kitty-scrollback-internals	kitty-scrollback.txt	/*kitty-scrollback-internals*
+kitty-scrollback-intro	kitty-scrollback.txt	/*kitty-scrollback-intro*
+kitty-scrollback-setup	kitty-scrollback.txt	/*kitty-scrollback-setup*
+kitty-scrollback-tab-title	kitty-scrollback.txt	/*kitty-scrollback-tab-title*
+kitty-scrollback-usage	kitty-scrollback.txt	/*kitty-scrollback-usage*
+kitty-scrollback.txt	kitty-scrollback.txt	/*kitty-scrollback.txt*
