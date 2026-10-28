@@ -1,4 +1,4 @@
-*kitty-scrollback.txt*	Vim as kitty's scrollback pager
+*kitty-scrollback.txt*	Vim as kitty's and tmux's scrollback pager
 
 Author: Jan Claußen
 Requires: Vim 9.1 or later with |+vim9script|, |+textprop| and |v:termosc|
@@ -8,6 +8,7 @@ CONTENTS						*kitty-scrollback*
 
 	1. Introduction ............... |kitty-scrollback-intro|
 	2. Setup ...................... |kitty-scrollback-setup|
+	   tmux ....................... |kitty-scrollback-tmux|
 	3. Usage ...................... |kitty-scrollback-usage|
 	4. How it works ............... |kitty-scrollback-internals|
 	5. Configuration .............. |kitty-scrollback-config|
@@ -29,15 +30,17 @@ ctrl+shift+h) in Vim so it looks exactly like the screen you were just on:
 The pager runs with its own vimrc and without any plugins, so neither your
 vimrc nor other plugins can change how the scrollback looks.
 
+It also shows the scrollback of tmux panes, see |kitty-scrollback-tmux|.
+
 ==============================================================================
 2. Setup					*kitty-scrollback-setup*
 
 When Vim starts inside kitty and a kitty.conf exists, the plugin checks
-whether kitty's `scrollback_pager` uses it. If not, it asks whether it should
-configure kitty:
+whether kitty's `scrollback_pager` uses it and the scrollback key is mapped
+to its kitten. If not, it asks whether it should configure kitty:
 
-	Yes		Sets `scrollback_pager` in kitty.conf and makes kitty
-			reload its configuration.
+	Yes		Sets `scrollback_pager` and the key mapping in kitty.conf
+			and makes kitty reload its configuration.
 	No		Does nothing, you will be asked again next time.
 	Never ask again	Does nothing and stops asking.
 
@@ -48,8 +51,8 @@ also in ~/Library/Preferences/kitty. `include` and `globinclude` are followed
 to find the setting that is actually in effect.
 
 When configuring, kitty.conf is first copied to kitty.conf.{timestamp}.bak.
-Existing `scrollback_pager` lines are commented out and the new one is added
-at the end of the file, so no `include` can override it.
+Existing `scrollback_pager` lines are commented out and the new settings are
+added at the end of the file, so no `include` can override them.
 
 						*:KittyScrollbackSetup*
 :KittyScrollbackSetup
@@ -63,18 +66,59 @@ The setting it writes looks like this: >
 <(on one line). The Vim that ran the setup is used, written as just "vim" when
 that is the one found in $PATH.
 
+							*kitty-scrollback-tmux*
+tmux ~
+
+kitty only sees tmux's screen, not the history of tmux's panes. So the setup
+also maps the keys that kitty.conf maps to `show_scrollback` (or
+`kitty_mod+h` when there are none) to the plugin's kitten: >
+	map kitty_mod+h kitten
+	    \ ~/.vim/plugged/kitty-scrollback.vim/kitty_scrollback.py vim
+<(on one line). When a tmux client is the foreground process of the kitty
+window, the kitten runs tmux-scrollback.sh, which opens the pager in a
+borderless popup that covers exactly tmux's active pane and shows its
+history. Otherwise it does what `show_scrollback` does. Nothing needs to be
+configured in tmux, which has to be 3.2 or later. The tmux socket the client
+was started with (`-L` or `-S`) is used.
+
+When tmux runs on another machine, behind ssh, the kitten can't reach it. So
+when Vim runs in tmux, the setup also offers to add this to tmux.conf (each
+setting on one line): >
+	set -as terminal-overrides ',*:smcup=\E[?1049h
+	    \ \E]1337;SetUserVar=kitty_scrollback_tmux=MQ==\007
+	    \ :rmcup=\E]1337;SetUserVar=kitty_scrollback_tmux\007\E[?1049l'
+	set -s user-keys[42] "\e[4242~"
+	bind -n User42 run-shell -b
+	    \ "~/.vim/plugged/kitty-scrollback.vim/tmux-scrollback.sh
+	    \ #{client_pid} vim"
+<tmux enters the alternate screen when a client attaches and leaves it when
+the client detaches or exits, so the user variable kitty_scrollback_tmux is
+set in kitty exactly while a client is attached, also through ssh. While it
+is set and kitty shows the alternate screen, the kitten sends the key above
+to tmux instead of showing kitty's scrollback. The plugin must be installed
+on both machines; run |:KittyScrollbackSetup| in Vim inside tmux on the one
+and in kitty on the other. The settings are also loaded into the running
+tmux server, and clients that are already attached are announced to kitty
+right away.
+
+Vim inside tmux recognizes kitty by tmux's client terminal, so the setup also
+works from there.
+
 ==============================================================================
 3. Usage					*kitty-scrollback-usage*
 
-Open the scrollback with kitty's `show_scrollback` action. A purple
-SCROLLBACK label and the line position are shown in the bottom row, which Vim
-needs for its command line anyway.
+Open the scrollback with kitty's `show_scrollback` key (ctrl+shift+h by
+default), also when the window runs tmux. A purple SCROLLBACK label and the line
+position are shown in the bottom row, which Vim needs for its command line
+anyway.
 
 	q, i		Close the pager.
 	y		Yank as usual. Everything yanked is also copied to the
 			system clipboard through kitty (OSC 52), which needs
 			`write-clipboard` in kitty's `clipboard_control`. This
-			also works over ssh.
+			also works over ssh. In tmux it goes to a tmux buffer,
+			which tmux passes on to the system clipboard when
+			`set-clipboard` is on.
 
 Everything else is normal Vim. 'virtualedit' is "all", so the cursor can be
 anywhere a terminal cursor can be, also past the end of a line.
@@ -98,6 +142,12 @@ row is the last line of the input and the pager has the size of kitty's
 window, the cursor line follows from CURSOR_LINE. When the cursor is on
 kitty's last row, the view moves up by one line, as Vim always keeps the last
 row for its command line.
+
+In tmux, the pager is started with "TmuxScrollback {pane}" and asks tmux for
+the pane's history (`capture-pane -e`), the cursor and, in copy mode, the
+scroll position and copy mode's cursor. The view is restored the same way.
+Palette colors are asked from tmux, which answers with what it knows about
+the terminal.
 
 ==============================================================================
 5. Configuration				*kitty-scrollback-config*

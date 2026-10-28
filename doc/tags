@@ -6,5 +6,6 @@ kitty-scrollback-internals	kitty-scrollback.txt	/*kitty-scrollback-internals*
 kitty-scrollback-intro	kitty-scrollback.txt	/*kitty-scrollback-intro*
 kitty-scrollback-setup	kitty-scrollback.txt	/*kitty-scrollback-setup*
 kitty-scrollback-tab-title	kitty-scrollback.txt	/*kitty-scrollback-tab-title*
+kitty-scrollback-tmux	kitty-scrollback.txt	/*kitty-scrollback-tmux*
 kitty-scrollback-usage	kitty-scrollback.txt	/*kitty-scrollback-usage*
 kitty-scrollback.txt	kitty-scrollback.txt	/*kitty-scrollback.txt*

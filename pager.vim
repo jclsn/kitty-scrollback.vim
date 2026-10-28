@@ -10,6 +10,9 @@ vim9script
 # kitty.conf (:KittyScrollbackSetup writes this):
 #   scrollback_pager vim -N --not-a-term -u ~/.vim/plugged/kitty-scrollback.vim/pager.vim -c "KittyScrollback INPUT_LINE_NUMBER CURSOR_LINE CURSOR_COLUMN" -
 #
+# In tmux, tmux-scrollback.sh starts it in a popup with "TmuxScrollback PANE"
+# instead, and the pager gets the scrollback from tmux itself.
+#
 # -N is needed because Vim9 script restores 'cpoptions' after sourcing, which
 # would otherwise leave Vim in compatible mode.
 
@@ -54,6 +57,14 @@ set shortmess+=IF
 &t_Ts = "\e[9m"
 &t_Te = "\e[29m"
 &t_8u = "\e[58:2::%lu:%lu:%lum"
+
+# In a tmux popup, where tmux handles the clipboard and the window
+const IN_TMUX = !empty($TMUX)
+if IN_TMUX
+	# Vim only knows these by itself for xterm-like terminals
+	&t_8f = "\e[38;2;%lu;%lu;%lum"
+	&t_8b = "\e[48;2;%lu;%lu;%lum"
+endif
 
 nnoremap q <Cmd>quitall!<CR>
 nnoremap i <Cmd>quitall!<CR>
@@ -120,7 +131,8 @@ endtry
 const DIM_OPACITY = ReadDimOpacity()
 
 var apply_timer = 0
-var view: list<number> = []
+# Restores the view once Vim knows its size
+var PendingView: func()
 
 def ResolveColor(c: number, default: string): string
 	if c < 0
@@ -400,21 +412,18 @@ def Render()
 	setlocal buftype=nofile bufhidden=hide noswapfile nomodified nomodifiable
 enddef
 
-# Puts kitty's first visible line at the top and the cursor on kitty's cursor
-# cell. "input_line" is the buffer line of the first line on kitty's screen,
-# "cursor_line" and "cursor_col" are 1-based screen coordinates, or 0 when the
-# cursor was scrolled out of view.
-def RestoreView(input_line: number, cursor_line: number, cursor_col: number)
+# Puts the terminal's first visible line at the top and the cursor on the
+# terminal's cursor cell. "top_line" and "cursor_line" are buffer lines,
+# "cursor_line" is 0 when the cursor was scrolled out of view.
+def RestoreView(top_line: number, cursor_line: number, cursor_col: number)
 	const last = line('$')
 	const height = winheight(0)
-	var top = max([1, min([input_line, last])])
+	var top = max([1, min([top_line, last])])
 	if cursor_line <= 0
 		winrestview({topline: top, lnum: min([top + height - 1, last]), col: 0})
 		return
 	endif
-	# The pager has the same size as kitty's screen, whose last row is the
-	# buffer's last line. This also holds when kitty was scrolled back.
-	const lnum = max([1, min([last - &lines + cursor_line, last])])
+	const lnum = max([1, min([cursor_line, last])])
 	# Vim needs a row for the command line; only scroll when the cursor would
 	# otherwise end up there
 	if lnum >= top + height
@@ -471,26 +480,68 @@ def OnOsc()
 enddef
 
 def OnEnter()
-	if empty(view)
+	if PendingView == null_function
 		return
 	endif
-	RestoreView(view[0], view[1], view[2])
+	PendingView()
 	QueryColors()
 	redraw!
 enddef
 
-def KittyScrollback(input_line: string, cursor_line: string, cursor_col: string)
+def Start(Restore: func())
 	Render()
 	ApplyColors()
-	view = [str2nr(input_line), str2nr(cursor_line), str2nr(cursor_col)]
+	PendingView = Restore
 	if v:vim_did_enter
 		OnEnter()
 	endif
 enddef
 
-# Yanks go to kitty's clipboard through OSC 52, which needs nothing but kitty's
-# write-clipboard permission
-def CopyToKitty()
+# "input_line" is the buffer line of the first line on kitty's screen,
+# "cursor_line" and "cursor_col" are 1-based screen coordinates, or 0 when the
+# cursor was scrolled out of view
+def KittyScrollback(input_line: string, cursor_line: string, cursor_col: string)
+	Start(() => {
+		# The pager has the same size as kitty's screen, whose last row is the
+		# buffer's last line. This also holds when kitty was scrolled back.
+		const lnum = str2nr(cursor_line) <= 0 ? 0 : line('$') - &lines + str2nr(cursor_line)
+		RestoreView(str2nr(input_line), lnum, str2nr(cursor_col))
+	})
+enddef
+
+# Shows the history and the screen of tmux pane "pane", the popup has the
+# pane's size. In copy mode the view and cursor are those of copy mode. Not
+# reading it from stdin avoids Vim's file message, which leads to a hit-enter
+# prompt in narrow panes.
+def TmuxScrollback(pane: string)
+	setline(1, systemlist($'tmux capture-pane -p -e -S - -t {shellescape(pane)}'))
+	const fields = ['history_size', 'pane_mode', 'scroll_position', 'cursor_x',
+		'cursor_y', 'copy_cursor_x', 'copy_cursor_y']
+	const format = fields->mapnew((_, f) => '#{' .. f .. '}')->join(',')
+	const out = system($'tmux display -p -t {shellescape(pane)} {shellescape(format)}')
+	var info: dict<string> = {}
+	if v:shell_error == 0
+		for [i, value] in split(trim(out), ',', true)->items()
+			info[get(fields, i, '')] = value
+		endfor
+	endif
+	Start(() => {
+		if empty(info)
+			RestoreView(line('$') - &lines + 1, 0, 0)
+			return
+		endif
+		const copy_mode = info.pane_mode == 'copy-mode'
+		const top = str2nr(info.history_size) + 1 - (copy_mode ? str2nr(info.scroll_position) : 0)
+		const x = str2nr(copy_mode ? info.copy_cursor_x : info.cursor_x)
+		const y = str2nr(copy_mode ? info.copy_cursor_y : info.cursor_y)
+		RestoreView(top, top + y, x + 1)
+	})
+enddef
+
+# Yanks go to the system clipboard. In kitty through OSC 52, which needs
+# nothing but kitty's write-clipboard permission, in tmux through a tmux buffer,
+# which tmux also passes on to the terminal's clipboard.
+def CopyToClipboard()
 	if v:event.operator != 'y'
 		return
 	endif
@@ -498,11 +549,16 @@ def CopyToKitty()
 	if v:event.regtype == 'V'
 		text += ['']
 	endif
-	echoraw($"\e]52;c;{base64_encode(str2blob(text))}\e\\")
+	if IN_TMUX
+		system('tmux load-buffer -w -', text->join("\n"))
+	else
+		echoraw($"\e]52;c;{base64_encode(str2blob(text))}\e\\")
+	endif
 enddef
 
 autocmd VimEnter * ++once OnEnter()
-autocmd TextYankPost * CopyToKitty()
+autocmd TextYankPost * CopyToClipboard()
 autocmd TermResponseAll osc OnOsc()
 
 command -bar -nargs=+ KittyScrollback KittyScrollback(<f-args>)
+command -bar -nargs=1 TmuxScrollback TmuxScrollback(<f-args>)

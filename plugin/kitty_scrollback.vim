@@ -1,7 +1,7 @@
 vim9script
 # kitty-scrollback.vim - Vim as kitty's scrollback pager
 # The pager itself is pager.vim, which kitty starts with -u. This only offers
-# to configure kitty for it.
+# to configure kitty for it, also from inside tmux.
 
 if exists('g:loaded_kitty_scrollback')
 	finish
