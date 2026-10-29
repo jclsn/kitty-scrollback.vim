@@ -1,5 +1,5 @@
-if !has('vim9script') || v:version < 900
-  " Needs Vim version 9.0 and above
+if !has('vim9script') || !has('patch-9.1.1703')
+  " Needs Vim 9.1.1703 and above, for TermResponseAll on OSC responses
   finish
 endif
 

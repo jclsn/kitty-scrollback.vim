@@ -1,6 +1,6 @@
 *kitty-scrollback.txt*	Vim as kitty's and tmux's scrollback pager
 
-Requires Vim 9.1 with |+vim9script|, |+textprop| and |v:termosc|, tmux 3.2.
+Requires Vim 9.1.1703 with |+vim9script|, |+textprop| and |v:termosc|, tmux 3.2.
 
 						*kitty-scrollback*
 kitty's `show_scrollback` key (ctrl+shift+h) opens the scrollback in Vim with

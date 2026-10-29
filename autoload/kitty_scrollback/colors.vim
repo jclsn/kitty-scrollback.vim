@@ -57,13 +57,20 @@ def XtermPalette(): list<string>
   return palette
 enddef
 
+# Return the "fg" or "bg" GUI color of highlight group "name", or "default".
+# Without 'termguicolors' Vim returns a cterm color number instead.
+def HlColor(name: string, what: string, default: string): string
+  var color = synIDattr(hlID(name), $'{what}#')
+  return color =~ '^#\x\{6}$' ? color : default
+enddef
+
 # Colors of the terminal, updated from its answers to Query()
 var term_colors = {
   palette: XtermPalette(),
-  fg: synIDattr(hlID('Normal'), 'fg#') ?? '#ffffff',
-  bg: synIDattr(hlID('Normal'), 'bg#') ?? '#000000',
+  fg: HlColor('Normal', 'fg', '#ffffff'),
+  bg: HlColor('Normal', 'bg', '#000000'),
   selfg: '',
-  selbg: synIDattr(hlID('Visual'), 'bg#'),
+  selbg: HlColor('Visual', 'bg', ''),
 }
 
 # The colors of the last time are right until the terminal answers
@@ -220,9 +227,9 @@ def SaveCache()
   endtry
 enddef
 
-# Handle the terminal's answer to an OSC color query
-export def OnOsc()
-  var m = v:termosc->matchlist('\]\(\d\+\);\%(\(\d\+\);\)\=rgb:\(\x\+\)/\(\x\+\)/\(\x\+\)')
+# Handle the terminal's answer "osc" to an OSC color query
+export def HandleOsc(osc: string)
+  var m = osc->matchlist('\]\(\d\+\);\%(\(\d\+\);\)\=rgb:\(\x\+\)/\(\x\+\)/\(\x\+\)')
   if m->empty() || (m[1] != '4' && !osc_colors->has_key(m[1]))
     return
   endif
@@ -241,6 +248,11 @@ export def OnOsc()
     SaveCache()
     redraw!
   })
+enddef
+
+# Handle an OSC sequence from the terminal
+export def OnOsc()
+  HandleOsc(v:termosc)
 enddef
 
 # vim: tabstop=8 shiftwidth=2 softtabstop=2 expandtab

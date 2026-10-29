@@ -1,0 +1,35 @@
+name: tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: linux (vim ${{ matrix.vim }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        vim:
+          - nightly
+          # The first version with TermResponseAll for OSC responses
+          - v9.1.1703
+    steps:
+      - name: Install packages
+        run: |
+          sudo apt update
+          sudo apt install -y tmux
+      - name: Setup Vim
+        uses: rhysd/action-setup-vim@v1
+        id: vim
+        with:
+          version: ${{ matrix.vim }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          export VIMPRG=${{ steps.vim.outputs.executable }}
+          $VIMPRG --version
+          tmux -V
+          ./test/run_tests.sh
