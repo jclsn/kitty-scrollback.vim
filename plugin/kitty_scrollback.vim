@@ -1,23 +1,19 @@
-vim9script
-# kitty-scrollback.vim - Vim as kitty's scrollback pager
-# The pager itself is pager.vim, which kitty starts with -u. This only offers
-# to configure kitty for it, also from inside tmux.
-
-if exists('g:loaded_kitty_scrollback')
-	finish
+if !has('vim9script') || v:version < 900
+  " Needs Vim version 9.0 and above
+  finish
 endif
-g:loaded_kitty_scrollback = 1
 
-import autoload 'kitty_scrollback.vim'
+vim9script noclear
 
-command -bar KittyScrollbackSetup kitty_scrollback.Setup(true)
+# Vim as kitty's and tmux's scrollback pager
 
-def Check()
-	# Only ask in an interactive Vim
-	if get(g:, 'kitty_scrollback_check', true) && has('ttyin') && has('ttyout')
-		kitty_scrollback.Setup(false)
-	endif
-enddef
+if get(g:, 'loaded_kitty_scrollback', false)
+  finish
+endif
+g:loaded_kitty_scrollback = true
 
-# After startup, so the prompt doesn't get in the way of the first screen
-autocmd VimEnter * ++once timer_start(0, (_) => Check())
+import autoload '../autoload/kitty_scrollback/setup.vim'
+
+command -bar KittyScrollbackSetup setup.Setup()
+
+# vim: tabstop=8 shiftwidth=2 softtabstop=2 expandtab
