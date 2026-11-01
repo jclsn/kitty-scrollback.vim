@@ -18,7 +18,15 @@ enddef
 
 # Return [col, length, style] of each text property in line "lnum"
 def Props(lnum: number): list<list<any>>
-  return prop_list(lnum)->mapnew((_, p) => [p.col, p.length, colors.GroupStyle(p.type)])
+  return prop_list(lnum)->filter((_, p) => !p->has_key('text'))
+    ->mapnew((_, p) => [p.col, p.length, colors.GroupStyle(p.type)])
+enddef
+
+# Return [col, width, style] of each virtual text in line "lnum", in the order
+# they are drawn.  prop_list() returns those at the same column in reverse.
+def VirtualText(lnum: number): list<list<any>>
+  return prop_list(lnum)->filter((_, p) => p->has_key('text'))
+    ->mapnew((_, p) => [p.col, p.text->len(), colors.GroupStyle(p.type)])->reverse()
 enddef
 
 # Test for text without escape sequences
@@ -127,6 +135,40 @@ enddef
 def g:Test_Render_MultiByte()
   assert_equal(['äöü x'], Render(["äöü \e[31mx"]))
   assert_equal([[8, 1, Style({fg: 1})]], Props(1))
+enddef
+
+# Test for dropping trailing blanks that look like the default background
+def g:Test_Render_TrailingBlanks()
+  assert_equal(['a', '', 'b'], Render(["a   ", " \t ", "b \e[0m  "]))
+
+  # Blanks in a style without a background are invisible too
+  assert_equal(['red'], Render(["\e[1;31mred   \e[0m"]))
+  assert_equal([[1, 3, Style({fg: 1, attrs: colors.BOLD})]], Props(1))
+  assert_equal([''], Render(["\e[31m   "]))
+  assert_equal([], Props(1))
+enddef
+
+# Test for trailing blanks that are visible, they are drawn as virtual text
+# so that "$" and yanks stop at the text
+def g:Test_Render_VisibleTrailingBlanks()
+  assert_equal(['a', 'b'], Render(["a\e[41m  \e[0m  ", "b\e[7m  \e[0m "]))
+  assert_equal([], Props(1))
+  assert_equal([[2, 2, Style({bg: 1})]], VirtualText(1))
+  assert_equal([[2, 2, Style({attrs: colors.REVERSE})]], VirtualText(2))
+
+  # Default blanks between visible ones keep their width
+  assert_equal(['c'], Render(["c\e[4m  \e[0m   \e[44m \e[0m  "]))
+  assert_equal([
+    [2, 2, Style({underline: 1})],
+    [2, 3, Style({})],
+    [2, 1, Style({bg: 4})],
+  ], VirtualText(1))
+
+  # The padding of a full screen program, also on its empty rows
+  assert_equal(['code', ''], Render(["\e[44mcode    \e[0m", "\e[44m        \e[0m"]))
+  assert_equal([[1, 4, Style({bg: 4})]], Props(1))
+  assert_equal([[5, 4, Style({bg: 4})]], VirtualText(1))
+  assert_equal([[1, 8, Style({bg: 4})]], VirtualText(2))
 enddef
 
 # vim: tabstop=8 shiftwidth=2 softtabstop=2 expandtab

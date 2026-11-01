@@ -117,21 +117,36 @@ def CsiLength(seq: string): number
   return csi_end < 0 ? 1 : csi_end
 enddef
 
-# Add the text property range of "group" in line "lnum" to "props"
-def AddProp(props: dict<list<list<number>>>, group: string, lnum: number,
-            start: number, end: number)
+# Add the range of "group" from "start" to "end" to "ranges"
+def AddRange(ranges: list<list<any>>, group: string, start: number, end: number)
   if group != '' && end > start
-    props[group] = props->get(group, [])->add([lnum, start, lnum, end])
+    ranges->add([group, start, end])
   endif
 enddef
 
+# Return whether a blank in "group" looks different from the default
+# background
+def VisibleBlank(group: string): bool
+  var style = colors.GroupStyle(group)
+  return style.bg >= 0 || style.underline > 0
+    || and(style.attrs, colors.REVERSE + colors.STRIKE) != 0
+enddef
+
+# Text property type of blanks in the default style, drawn as virtual text
+const blank_type = 'KittyScrollbackBlank'
+prop_type_add(blank_type, {highlight: 'Normal'})
+
 # Strip the escape sequences from line "lnum" and add the ranges of the text
-# styles to "props".  "group" is the group at the start of the line.  Returns
-# the text and the group at the end of the line.
+# styles to "props".  Trailing blanks are dropped, so that "$", selections and
+# yanks stop at the end of the text.  Those that are visible, like the
+# background of a full screen program, are added to "virtual" as [lnum, col,
+# group, width] to be drawn as virtual text.  "group" is the group at the start
+# of the line.  Returns the text and the group at the end of the line.
 def StripLine(line: string, lnum: number, group: string,
-              props: dict<list<list<number>>>): list<string>
+              props: dict<list<list<number>>>, virtual: list<list<any>>): list<string>
   var sequences = line->split("\e", true)
   var text = sequences[0]
+  var ranges: list<list<any>> = []
   var cur_group = group
   var group_start = 1
   # An OSC sequence ending in ESC \ spans two items
@@ -146,7 +161,7 @@ def StripLine(line: string, lnum: number, group: string,
       if seq[len - 1] == 'm'
         var new_group = NextGroup(cur_group, seq[1 : len - 2])
         if new_group != cur_group
-          AddProp(props, cur_group, lnum, group_start, text->len() + 1)
+          AddRange(ranges, cur_group, group_start, text->len() + 1)
           cur_group = new_group
           group_start = text->len() + 1
         endif
@@ -167,8 +182,39 @@ def StripLine(line: string, lnum: number, group: string,
     text ..= rest
   endfor
 
-  AddProp(props, cur_group, lnum, group_start, text->len() + 1)
-  return [text, cur_group]
+  AddRange(ranges, cur_group, group_start, text->len() + 1)
+
+  var keep = text->substitute('\s\+$', '', '')->len()
+  # The last trailing blank that is visible
+  var visible_end = keep
+  for [g, _, end] in ranges
+    if end - 1 > visible_end && VisibleBlank(g)
+      visible_end = end - 1
+    endif
+  endfor
+
+  # The trailing blanks up to there in their style, and in the default style
+  # where no range covers them
+  var col = keep + 1
+  for [g, start, end] in ranges
+    var from = max([start, col])
+    var to = min([end - 1, visible_end])
+    if from > to
+      continue
+    endif
+    if from > col
+      virtual->add([lnum, keep + 1, blank_type, from - col])
+    endif
+    virtual->add([lnum, keep + 1, VisibleBlank(g) ? g : blank_type, to - from + 1])
+    col = to + 1
+  endfor
+
+  for [g, start, end] in ranges
+    if start <= keep
+      props[g] = props->get(g, [])->add([lnum, start, lnum, min([end, keep + 1])])
+    endif
+  endfor
+  return [text->strpart(0, keep), cur_group]
 enddef
 
 # Replace the text in the current buffer with its plain text and highlight it
@@ -176,10 +222,11 @@ enddef
 export def Render()
   var lines: list<string> = []
   var props: dict<list<list<number>>> = {}
+  var virtual: list<list<any>> = []
   var group = ''
 
   for [idx, line] in getline(1, '$')->items()
-    var [text, end_group] = StripLine(line, idx + 1, group, props)
+    var [text, end_group] = StripLine(line, idx + 1, group, props, virtual)
     lines->add(text)
     group = end_group
   endfor
@@ -187,6 +234,9 @@ export def Render()
   setline(1, lines)
   for [name, ranges] in props->items()
     prop_add_list({type: name}, ranges)
+  endfor
+  for [lnum, col, name, width] in virtual
+    prop_add(lnum, col, {type: name, text: repeat(' ', width)})
   endfor
 enddef
 

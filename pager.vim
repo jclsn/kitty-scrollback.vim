@@ -59,6 +59,9 @@ endif
 
 nnoremap q <Cmd>quitall!<CR>
 nnoremap i <Cmd>quitall!<CR>
+# Select up to the last character, not the line break or with 'virtualedit'
+# "all" a cell past the text
+xnoremap $ g_
 
 # Restores the view once Vim knows the window size
 var PendingView: func()
@@ -88,8 +91,25 @@ def OnVimEnter()
     return
   endif
   PendingView()
+  restored_pos = getcurpos()
+  augroup KittyScrollbackCursor
+    au!
+    autocmd CursorMoved * LimitCursor()
+  augroup END
   colors.Query()
   redraw!
+enddef
+
+# 'virtualedit' "all" is only there to start on the terminal's cursor cell.
+# Once the cursor moves, it can't go into the empty space past the text, so
+# that selections stop at the text.
+var restored_pos: list<number> = []
+
+def LimitCursor()
+  if getcurpos() != restored_pos
+    set virtualedit=
+    autocmd! KittyScrollbackCursor
+  endif
 enddef
 
 # Render the buffer and restore the view with "Restore"
