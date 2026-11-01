@@ -8,8 +8,9 @@ its colors, view and cursor as on screen. In tmux, also behind ssh, the same
 key shows the current pane's history in a popup.
 
 	q, i	Close the pager.
-	y	Yank, also to the clipboard: OSC 52 in kitty (needs
-		`write-clipboard` in `clipboard_control`), a tmux buffer in tmux.
+	y	Yank without trailing blanks, also to the clipboard: OSC 52 in
+		kitty (needs `write-clipboard` in `clipboard_control`), a tmux
+		buffer in tmux.
 
 						*:KittyScrollbackSetup*
 :KittyScrollbackSetup

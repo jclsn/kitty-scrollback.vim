@@ -61,6 +61,41 @@ def g:Test_KittyScrollback_CursorBeyondText()
   assert_equal(40, virtcol('.'))
 enddef
 
+# Test for "$" and yanks stopping at the text, also where a full screen
+# program's background fills the rest of the line
+def g:Test_TrailingBlanks()
+  :enew!
+  setline(1, ["\e[44mcode   \e[0m", "\e[44m      \e[0m", "\e[44mstatus  \e[0m"])
+  :KittyScrollback 1 1 1
+  normal! gg$
+  assert_equal(4, col('.'))
+  assert_equal(4, virtcol('.'))
+
+  :%yank
+  assert_equal(['code', '', 'status'], getreg('"', 1, true))
+
+  normal ggv$y
+  assert_equal('code', getreg('"'))
+enddef
+
+# Test for the cursor starting past the text, but not going there anymore once
+# it moved
+def g:Test_CursorPastText()
+  FillBuffer(&lines)
+  :KittyScrollback 1 1 40
+  assert_equal(40, virtcol('.'))
+  doautocmd CursorMoved
+  assert_equal('all', &virtualedit)
+
+  normal! j
+  doautocmd CursorMoved
+  assert_equal('', &virtualedit)
+  normal! 40|
+  assert_equal(6, virtcol('.'))
+
+  set virtualedit=all
+enddef
+
 # Test for the mappings that close the pager
 def g:Test_Pager_Mappings()
   assert_match('quitall!', maparg('q', 'n'))
