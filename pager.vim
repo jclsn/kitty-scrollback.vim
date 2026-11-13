@@ -60,8 +60,9 @@ endif
 nnoremap q <Cmd>quitall!<CR>
 nnoremap i <Cmd>quitall!<CR>
 # Select up to the last character, not the line break or with 'virtualedit'
-# "all" a cell past the text
-xnoremap $ g_
+# "all" a cell past the text.  In block mode "$" already extends every line to
+# its end, but would pad the shorter ones with 'virtualedit' "all".
+xnoremap <expr> $ mode() ==# "\<C-V>" ? "\<Cmd>set virtualedit=\<CR>$" : 'g_'
 
 # Restores the view once Vim knows the window size
 var PendingView: func()

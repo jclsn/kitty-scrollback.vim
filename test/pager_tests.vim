@@ -78,6 +78,18 @@ def g:Test_TrailingBlanks()
   assert_equal('code', getreg('"'))
 enddef
 
+# Test for "$" in block mode extending every line to its end, also when the
+# cursor's line is shorter
+def g:Test_BlockSelectionToEnd()
+  :enew!
+  setline(1, ['a longer line', 'short', 'end'])
+  :KittyScrollback 1 1 1
+  exe "normal gg0\<C-V>j$y"
+  assert_equal(['a longer line', 'short'], getreg('"', 1, true))
+
+  set virtualedit=all
+enddef
+
 # Test for the cursor starting past the text, but not going there anymore once
 # it moved
 def g:Test_CursorPastText()
